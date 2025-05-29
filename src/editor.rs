@@ -13,6 +13,16 @@ enum Mode {
     Command,
 }
 
+impl Mode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Mode::Normal => "NORMAL",
+            Mode::Insert => "INSERT",
+            Mode::Command => "COMMAND",
+        }
+    }
+}
+
 pub struct Editor {
     cx: u16,          // Cursor X
     cy: u16,          // Cursor Y
@@ -107,7 +117,7 @@ impl Editor {
             execute!(self.out, cursor::MoveToColumn(0), Print(line))?;
         }
 
-        // TODO: draw the status bar
+        execute!(self.out, cursor::MoveTo(0, self.sr - 2), Print(format!("{}", self.mode.as_str())))?;
         execute!(self.out, cursor::MoveTo(0, self.sr - 1), Print(self.cmd.as_str()))?;
 
         execute!(

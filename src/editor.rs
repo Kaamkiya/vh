@@ -1,8 +1,8 @@
 use std::{fs::File, io::{self, Write}};
 
 use crossterm::{
-    cursor::{MoveTo, MoveToColumn}, event::{read, Event, KeyCode}, execute, style::Print, terminal::{
-        disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen
+    cursor, event::{read, Event, KeyCode}, execute, style::Print, terminal::{
+        self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen
     }
 };
 use ropey::Rope;
@@ -18,7 +18,8 @@ pub struct Editor {
     cy: u16,          // Cursor Y
     sc: u16,          // Screen columns
     sr: u16,          // Screen rows
-    rowcount: u16,    // amount of rows in the file
+    ro: u16,          // Row offset for scrolling
+    co: u16,          // Column offset for scrolling
     mode: Mode,       // Current editor mode
     filename: String, // Name of file being edited
     quit: bool,       // Whether the program should quit next iteration
@@ -33,7 +34,8 @@ impl Editor {
             cy: 0,
             sc: 0,
             sr: 0,
-            rowcount: 0,
+            ro: 0,
+            co: 0,
             mode: Mode::Normal,
             filename: filename,
             quit: false,
@@ -43,7 +45,7 @@ impl Editor {
     }
 
     fn init(&mut self) -> io::Result<()> {
-        (self.sc, self.sr) = size()?;
+        (self.sc, self.sr) = terminal::size()?;
 
         execute!(self.out, EnterAlternateScreen)?;
 
@@ -51,30 +53,40 @@ impl Editor {
             File::open(self.filename.as_str())?
         )?;
 
-        enable_raw_mode()
+        terminal::enable_raw_mode()
     }
 
     fn deinit(&mut self) -> io::Result<()> {
         execute!(self.out, LeaveAlternateScreen)?;
-        disable_raw_mode()
+        terminal::disable_raw_mode()
     }
 
     fn redraw_screen(&mut self) -> io::Result<()> {
         execute!(
             self.out,
+            cursor::Hide,
             Clear(ClearType::All),
-            MoveTo(0, 0),
+            cursor::MoveTo(0, 0),
         )?;
 
-        for line in self.text.lines() {
-            execute!(
-                self.out,
-                MoveToColumn(0),
-                Print(line),
-            )?;
+        for y in 0..(self.sr - 2) {
+            let linenum = (y + self.ro) as usize;
+            if linenum >= self.text.len_lines() {
+                break;
+            }
+
+            let line = self.text.line(linenum);
+            execute!(self.out, cursor::MoveToColumn(0), Print(line))?;
         }
 
         // draw the status bar
+        // draw the command line
+
+        execute!(
+            self.out,
+            cursor::MoveTo(self.cx, self.cy),
+            cursor::Show,
+        )?;
 
         Ok(())
     }

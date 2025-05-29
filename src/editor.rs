@@ -1,7 +1,7 @@
-use std::{fs::File, io::{self, Write}};
+use std::{fs::File, io};
 
 use crossterm::{
-    cursor, event::{read, Event, KeyCode}, execute, style::Print, terminal::{
+    cursor, event::{read, Event, KeyCode::{self, Char}, KeyEvent}, execute, style::Print, terminal::{
         self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen
     }
 };
@@ -25,6 +25,7 @@ pub struct Editor {
     quit: bool,       // Whether the program should quit next iteration
     out: io::Stdout,  // Where to write output to
     text: Rope,       // The current buffer being edited
+    cmd: String,      // The command being typed
 }
 
 impl Editor {
@@ -41,6 +42,7 @@ impl Editor {
             quit: false,
             out: io::stdout(),
             text: Rope::new(),
+            cmd: String::new(),
         }
     }
 
@@ -61,6 +63,13 @@ impl Editor {
         terminal::disable_raw_mode()
     }
 
+    fn die(&mut self, msg: String) -> io::Result<()> {
+        self.deinit()?;
+        println!("{}", msg);
+
+        Ok(())
+    }
+
     fn redraw_screen(&mut self) -> io::Result<()> {
         execute!(
             self.out,
@@ -79,8 +88,8 @@ impl Editor {
             execute!(self.out, cursor::MoveToColumn(0), Print(line))?;
         }
 
-        // draw the status bar
-        // draw the command line
+        // TODO: draw the status bar
+        execute!(self.out, cursor::MoveTo(0, self.sr - 1), Print(self.cmd.as_str()))?;
 
         execute!(
             self.out,
@@ -91,11 +100,70 @@ impl Editor {
         Ok(())
     }
 
-    fn process_input(&mut self) -> io::Result<()> {
-        let ev = read()?;
+    fn read_key(&mut self) -> io::Result<KeyEvent> {
+        match read() {
+            Ok(Event::Key(event)) => {
+                return Ok(event);
+            }
+            Err(err) => {
+                self.die(err.to_string())?;
+            }
+            _ => (),
+        }
 
-        if ev == Event::Key(KeyCode::Char('q').into()) {
+        Err(io::Error::other("Failed to read key"))
+    }
+
+    fn process_normal(&mut self) -> io::Result<()> {
+        let key = self.read_key()?;
+
+        match key.code {
+            Char('i') => self.mode = Mode::Insert,
+            Char(':') => self.mode = Mode::Command,
+            Char('q') => self.quit = true, // TODO: make this happen in command mode only
+            _ => (),
+        }
+        Ok(())
+    }
+
+    fn process_command(&mut self) -> io::Result<()> {
+        self.cmd = String::from(":");
+
+        loop {
+            self.redraw_screen()?;
+            let key = self.read_key()?.code;
+            match key {
+                KeyCode::Enter => break,
+                KeyCode::Esc => {
+                    self.cmd = String::new();
+                    self.mode = Mode::Normal;
+                }
+                KeyCode::Backspace => _ = self.cmd.pop(),
+                KeyCode::Char(c) => self.cmd.push(c),
+                _ => (),
+            }
+        }
+
+        if self.cmd == String::from(":q") {
             self.quit = true;
+        }
+
+        self.mode = Mode::Normal;
+        Ok(())
+    }
+
+    fn process_insert(&mut self) -> io::Result<()> {
+        if self.read_key()?.code == KeyCode::Esc {
+            self.mode = Mode::Normal;
+        }
+        Ok(())
+    }
+
+    fn process_input(&mut self) -> io::Result<()> {
+        match self.mode {
+            Mode::Normal => self.process_normal()?,
+            Mode::Command => self.process_command()?,
+            Mode::Insert => self.process_insert()?,
         }
 
         Ok(())

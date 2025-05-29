@@ -1,10 +1,11 @@
-use std::io::{self, Write};
+use std::{fs::File, io::{self, Write}};
 
 use crossterm::{
-    cursor::MoveTo, event::{read, Event, KeyCode}, execute, style::{Attribute, Print, SetAttribute}, terminal::{
+    cursor::{MoveTo, MoveToColumn}, event::{read, Event, KeyCode}, execute, style::Print, terminal::{
         disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen
     }
 };
+use ropey::Rope;
 
 enum Mode {
     Normal,
@@ -22,6 +23,7 @@ pub struct Editor {
     filename: String, // Name of file being edited
     quit: bool,       // Whether the program should quit next iteration
     out: io::Stdout,  // Where to write output to
+    text: Rope,       // The current buffer being edited
 }
 
 impl Editor {
@@ -36,12 +38,19 @@ impl Editor {
             filename: filename,
             quit: false,
             out: io::stdout(),
+            text: Rope::new(),
         }
     }
 
     fn init(&mut self) -> io::Result<()> {
         (self.sc, self.sr) = size()?;
+
         execute!(self.out, EnterAlternateScreen)?;
+
+        self.text = Rope::from_reader(
+            File::open(self.filename.as_str())?
+        )?;
+
         enable_raw_mode()
     }
 
@@ -55,10 +64,16 @@ impl Editor {
             self.out,
             Clear(ClearType::All),
             MoveTo(0, 0),
-            Print("cool things shall someday fill this realm of wonder".to_string()),
         )?;
-        // for each line
-        //     draw the line
+
+        for line in self.text.lines() {
+            execute!(
+                self.out,
+                MoveToColumn(0),
+                Print(line),
+            )?;
+        }
+
         // draw the status bar
 
         Ok(())

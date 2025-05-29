@@ -1,0 +1,4 @@
+tui:                 crossterm
+string manipulation: crop
+syntax highlighting: tree_sitter
+fuzzy finding?:      nucleo

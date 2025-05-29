@@ -1,7 +1,7 @@
 use std::{fs::File, io};
 
 use crossterm::{
-    cursor, event::{read, Event, KeyCode::{self, Char}, KeyEvent}, execute, style::Print, terminal::{
+    cursor, event::{read, Event, KeyCode::{self, Char}}, execute, style::Print, terminal::{
         self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen
     }
 };
@@ -70,6 +70,25 @@ impl Editor {
         Ok(())
     }
 
+    fn scroll(&self) {
+        // set scroll offsets and cursor position
+        todo!()
+    }
+
+    fn insert_char(&mut self, ch: char) {
+        let idx = (self.ro + self.cy) as usize;
+        let lineidx = (self.co + self.cx) as usize;
+        self.text.insert_char(self.text.line_to_char(idx) + lineidx, ch);
+        
+        if ch != '\n' {
+            self.cx += 1;
+            return;
+        }
+
+        self.cx = 0;
+        self.cy += 1;
+    }
+
     fn redraw_screen(&mut self) -> io::Result<()> {
         execute!(
             self.out,
@@ -100,10 +119,10 @@ impl Editor {
         Ok(())
     }
 
-    fn read_key(&mut self) -> io::Result<KeyEvent> {
+    fn read_key(&mut self) -> io::Result<KeyCode> {
         match read() {
             Ok(Event::Key(event)) => {
-                return Ok(event);
+                return Ok(event.code);
             }
             Err(err) => {
                 self.die(err.to_string())?;
@@ -117,10 +136,9 @@ impl Editor {
     fn process_normal(&mut self) -> io::Result<()> {
         let key = self.read_key()?;
 
-        match key.code {
+        match key {
             Char('i') => self.mode = Mode::Insert,
             Char(':') => self.mode = Mode::Command,
-            Char('q') => self.quit = true, // TODO: make this happen in command mode only
             _ => (),
         }
         Ok(())
@@ -131,12 +149,13 @@ impl Editor {
 
         loop {
             self.redraw_screen()?;
-            let key = self.read_key()?.code;
+
+            let key = self.read_key()?;
             match key {
                 KeyCode::Enter => break,
                 KeyCode::Esc => {
                     self.cmd = String::new();
-                    self.mode = Mode::Normal;
+                    break;
                 }
                 KeyCode::Backspace => _ = self.cmd.pop(),
                 KeyCode::Char(c) => self.cmd.push(c),
@@ -153,9 +172,21 @@ impl Editor {
     }
 
     fn process_insert(&mut self) -> io::Result<()> {
-        if self.read_key()?.code == KeyCode::Esc {
-            self.mode = Mode::Normal;
+        let key = self.read_key()?;
+
+        match key {
+            KeyCode::Esc => self.mode = Mode::Normal,
+            KeyCode::Enter => self.insert_char('\n'),
+            //KeyCode::Backspace => self.delete_prev()?,
+            //KeyCode::Delete => self.delete_next()?,
+            KeyCode::Up => self.cy -= 1,
+            KeyCode::Down => self.cy += 1,
+            KeyCode::Right => self.cx += 1,
+            KeyCode::Left => self.cx -= 1,
+            Char(c) => self.insert_char(c),
+            _ => (),
         }
+
         Ok(())
     }
 

@@ -81,7 +81,7 @@ impl Editor {
     }
 
     fn scroll(&self) {
-        // set scroll offsets and cursor position
+        // set correct scroll offsets and cursor position
         todo!()
     }
 
@@ -97,6 +97,17 @@ impl Editor {
 
         self.cx = 0;
         self.cy += 1;
+    }
+
+    fn delete_char(&mut self, direction: i64) {
+        let idx = (self.ro + self.cy) as usize;
+        let lineidx = idx + (self.co + self.cx) as usize;
+        
+        let end = (lineidx as i64 + direction * 2) as usize;
+
+        let a = if end < lineidx { end } else { lineidx };
+        let b = if end > lineidx { lineidx } else { end };
+        self.text.remove(a..b);
     }
 
     fn redraw_screen(&mut self) -> io::Result<()> {
@@ -187,8 +198,8 @@ impl Editor {
         match key {
             KeyCode::Esc => self.mode = Mode::Normal,
             KeyCode::Enter => self.insert_char('\n'),
-            //KeyCode::Backspace => self.delete_prev()?,
-            //KeyCode::Delete => self.delete_next()?,
+            KeyCode::Backspace => self.delete_char(-2),
+            KeyCode::Delete => self.delete_char(2),
             KeyCode::Up => self.cy -= 1,
             KeyCode::Down => self.cy += 1,
             KeyCode::Right => self.cx += 1,
